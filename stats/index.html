@@ -1,0 +1,322 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>subarr stats</title>
+  <meta name="description" content="Public stats from anonymous subarr install heartbeats. Collecting since v1.0 launch; full dashboard ships with v1.1.">
+  <meta property="og:title" content="subarr stats">
+  <meta property="og:description" content="Public stats from anonymous subarr install heartbeats.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://subarr.com/stats">
+  <link rel="icon" href="/favicon.ico">
+  <style>
+    :root {
+      --violet-500: #8b5cf6;
+      --cyan-400: #22d3ee;
+      --bg-0: #0a0a0c;
+      --bg-1: #131318;
+      --bg-2: #1a1a22;
+      --bg-3: #25252e;
+      --fg-0: #f4f4f5;
+      --fg-1: #c8c8cc;
+      --fg-2: #888892;
+      --fg-3: #5a5a64;
+      --green: #22c55e;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      height: 100%;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      background: var(--bg-0);
+      color: var(--fg-1);
+      -webkit-font-smoothing: antialiased;
+    }
+    .shell {
+      max-width: 880px;
+      margin: 0 auto;
+      padding: 56px 24px 80px;
+    }
+    .top {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 16px;
+      margin-bottom: 44px;
+    }
+    .wordmark {
+      font-size: 24px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+    .wordmark .v { color: var(--violet-500); }
+    .nav a {
+      color: var(--fg-2);
+      text-decoration: none;
+      font-size: 14px;
+      margin-left: 16px;
+    }
+    .nav a:hover { color: var(--fg-0); }
+    h1 {
+      font-size: 32px;
+      line-height: 1.2;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+      color: var(--fg-0);
+      margin-bottom: 12px;
+    }
+    .lede {
+      font-size: 16px;
+      line-height: 1.55;
+      color: var(--fg-1);
+      max-width: 640px;
+      margin-bottom: 32px;
+    }
+    .card {
+      background: var(--bg-1);
+      border: 1px solid var(--bg-3);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    .card h2 {
+      font-size: 14px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--fg-2);
+      margin-bottom: 14px;
+    }
+    .card p {
+      font-size: 15px;
+      line-height: 1.55;
+      color: var(--fg-1);
+      margin-bottom: 12px;
+    }
+    .card p:last-child { margin-bottom: 0; }
+    .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 13px; }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      padding: 8px 0;
+      border-bottom: 1px solid var(--bg-2);
+    }
+    .stat-row:last-child { border-bottom: none; }
+    .stat-key { color: var(--fg-2); font-size: 14px; }
+    .stat-value {
+      color: var(--fg-0);
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 14px;
+    }
+    .stat-value.pending {
+      color: var(--fg-3);
+      font-style: italic;
+    }
+    .pulse {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      background: var(--green);
+      border-radius: 50%;
+      margin-right: 8px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .privacy {
+      margin-top: 32px;
+      padding: 20px 24px;
+      background: var(--bg-2);
+      border-radius: 12px;
+      border-left: 3px solid var(--cyan-400);
+    }
+    .privacy h2 { color: var(--cyan-400); }
+    .privacy code {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      background: var(--bg-3);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+    }
+    .links {
+      margin-top: 28px;
+      display: flex;
+      gap: 18px;
+      flex-wrap: wrap;
+    }
+    .links a {
+      color: var(--cyan-400);
+      text-decoration: none;
+      font-size: 14px;
+    }
+    .links a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="top">
+      <div class="wordmark"><span class="v">sub</span>arr stats</div>
+      <nav class="nav">
+        <a href="https://github.com/coaxk/subarr">GitHub</a>
+        <a href="https://github.com/coaxk/subarr/blob/main/README.md#telemetry">About telemetry</a>
+      </nav>
+    </div>
+
+    <h1>Public stats from anonymous install heartbeats.</h1>
+    <p class="lede">
+      Subarr installs that have opted in send a small daily payload. Aggregated stats live here.
+      The dashboard view ships with v1.1; this page is the v1.0 placeholder so you can verify the
+      pipe is live.
+    </p>
+
+    <div class="card">
+      <h2><span class="pulse"></span>receiver status</h2>
+      <div class="stat-row">
+        <span class="stat-key">telemetry.subarr.com</span>
+        <span class="stat-value" id="health-status">checking…</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-key">worker source</span>
+        <span class="stat-value"><a href="https://github.com/coaxk/subarr-telemetry" style="color:var(--cyan-400);text-decoration:none;">coaxk/subarr-telemetry</a></span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>active installs</h2>
+      <div class="stat-row">
+        <span class="stat-key">last 7 days</span>
+        <span class="stat-value" id="active-7d">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-key">last 30 days</span>
+        <span class="stat-value" id="active-30d">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-key">total ever</span>
+        <span class="stat-value" id="total-ever">—</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>subgen mix</h2>
+      <p style="font-size:13px;color:var(--fg-2);">Latest known subgen kind per install, last 30 days.</p>
+      <div id="subgen-mix"><div class="stat-row"><span class="stat-key">loading…</span><span class="stat-value pending">—</span></div></div>
+    </div>
+
+    <div class="card">
+      <h2>integration adoption</h2>
+      <p style="font-size:13px;color:var(--fg-2);">Per-integration usage across all installs, last 30 days.</p>
+      <div id="integrations"><div class="stat-row"><span class="stat-key">loading…</span><span class="stat-value pending">—</span></div></div>
+    </div>
+
+    <div class="privacy">
+      <h2>What's not on this page</h2>
+      <p>
+        File paths, titles, IPs, hostnames, API keys, languages, anything user-fingerprintable.
+        These cannot reach this page because they cannot reach the database — the receiving worker
+        rejects payloads containing any of them with HTTP 400 (<code>forbidden field: ...</code>),
+        and the database schema has no columns for them.
+      </p>
+      <p style="margin-top:8px;">
+        The exact JSON payload your install sends is always visible in
+        <code>Settings → Telemetry</code> inside subarr. One-click opt-out in the same panel and
+        in the onboarding wizard.
+      </p>
+    </div>
+
+    <div class="card" style="margin-top:24px;">
+      <h2>more views land in v1.1</h2>
+      <p>
+        Library-size distribution, scheduler-mode mix, walks-per-day cadence histogram, and the
+        global provider success leaderboard. Endpoints are live now — frontend dashboards are
+        coming.
+      </p>
+    </div>
+
+    <div class="links">
+      <a href="https://github.com/coaxk/subarr">subarr</a>
+      <a href="https://github.com/coaxk/subarr-subgen">subarr-subgen</a>
+      <a href="https://github.com/coaxk/subarr-telemetry">subarr-telemetry</a>
+      <a href="https://telemetry.subarr.com/v1/health">/v1/health</a>
+      <a href="https://telemetry.subarr.com/v1/stats/installs">/v1/stats/installs</a>
+    </div>
+  </div>
+
+  <script>
+    const WORKER = 'https://telemetry.subarr.com';
+
+    async function tryFetch(path) {
+      try {
+        const r = await fetch(WORKER + path, { mode: 'cors' });
+        if (!r.ok) return null;
+        return await r.json();
+      } catch {
+        return null;
+      }
+    }
+
+    async function load() {
+      // Health
+      const health = await tryFetch('/v1/health');
+      const healthEl = document.getElementById('health-status');
+      if (health && health.ok) {
+        healthEl.textContent = 'healthy';
+        healthEl.style.color = 'var(--green)';
+      } else {
+        healthEl.textContent = 'unreachable';
+        healthEl.style.color = 'var(--fg-3)';
+      }
+
+      // Installs
+      const installs = await tryFetch('/v1/stats/installs');
+      if (installs) {
+        document.getElementById('active-7d').textContent  = (installs.active_7d  || 0).toLocaleString();
+        document.getElementById('active-30d').textContent = (installs.active_30d || 0).toLocaleString();
+        document.getElementById('total-ever').textContent = (installs.total_ever || 0).toLocaleString();
+      }
+
+      // Subgen mix
+      const mix = await tryFetch('/v1/stats/subgen-mix');
+      if (mix && mix.by_kind && mix.by_kind.length) {
+        const total = mix.by_kind.reduce((a, b) => a + (b.n || 0), 0) || 1;
+        document.getElementById('subgen-mix').innerHTML = mix.by_kind.map(row => {
+          const pct = Math.round(((row.n || 0) / total) * 100);
+          const label = row.subgen_kind || 'unknown';
+          return `<div class="stat-row">
+            <span class="stat-key">${label}</span>
+            <span class="stat-value">${row.n.toLocaleString()} · ${pct}%</span>
+          </div>`;
+        }).join('');
+      } else if (mix) {
+        document.getElementById('subgen-mix').innerHTML =
+          '<div class="stat-row"><span class="stat-key">no data yet</span><span class="stat-value pending">—</span></div>';
+      }
+
+      // Integrations
+      const integrations = await tryFetch('/v1/stats/integrations');
+      if (integrations && integrations.counts) {
+        const entries = Object.entries(integrations.counts).sort((a, b) => b[1] - a[1]);
+        const total = integrations.total_installs || 1;
+        if (entries.length) {
+          document.getElementById('integrations').innerHTML = entries.map(([k, v]) => {
+            const pct = Math.round((v / total) * 100);
+            return `<div class="stat-row">
+              <span class="stat-key">${k}</span>
+              <span class="stat-value">${v.toLocaleString()} installs · ${pct}%</span>
+            </div>`;
+          }).join('');
+        } else {
+          document.getElementById('integrations').innerHTML =
+            '<div class="stat-row"><span class="stat-key">no data yet</span><span class="stat-value pending">—</span></div>';
+        }
+      }
+    }
+
+    load();
+    setInterval(load, 60000); // refresh every minute
+  </script>
+</body>
+</html>
