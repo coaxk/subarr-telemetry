@@ -1,0 +1,44 @@
+# Cloudflare Worker config for telemetry.subarr.com.
+#
+# This worker receives anonymous install-heartbeat pings from
+# self-hosted subarr installations, stores them in D1 (Cloudflare's
+# SQLite), and serves aggregated read-only stats endpoints that feed
+# subarr.com/stats and the in-product Settings panel.
+#
+# Privacy posture is enforced at the schema level: forbidden fields
+# from src/subarr/telemetry.py's regression test never have columns
+# to land in. If something fingerprintable arrives in the payload,
+# it gets silently dropped on insert.
+
+name = "subarr-telemetry"
+main = "src/worker.js"
+compatibility_date = "2026-01-01"
+
+# Custom domain — set up after first deploy in the Cloudflare dashboard:
+#   Workers & Pages → subarr-telemetry → Settings → Triggers → Custom Domains
+# Add `telemetry.subarr.com`. The DNS record gets created automatically
+# if subarr.com is on Cloudflare. If hosted elsewhere, add a CNAME to
+# subarr-telemetry.coaxk.workers.dev.
+# routes = [
+#   { pattern = "telemetry.subarr.com", custom_domain = true }
+# ]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "subarr-telemetry"
+# database_id gets filled in by `wrangler d1 create subarr-telemetry`.
+# Stub here so the file parses; real value lives in .dev.vars (gitignored)
+# or as a CI secret. Run `wrangler d1 create subarr-telemetry` once, then
+# paste the returned UUID below before first deploy.
+database_id = "REPLACE_WITH_D1_UUID_FROM_WRANGLER_D1_CREATE"
+
+[vars]
+# Soft caps. The worker rejects pings that arrive faster than this from
+# a single install_id. Daily-cadence telemetry from subarr sends once
+# per 24h; flooding suggests a bug we want to surface back to the user.
+MIN_INTERVAL_S = "3600"          # 1 hour minimum between pings per install
+FLOOD_THRESHOLD_S = "60"         # below this, set flood_detected=true in 429
+MAX_PAYLOAD_BYTES = "8192"       # 8KB hard cap. v1.0 payload is ~1KB.
+
+# CORS for the stats endpoints. subarr.com is the public dashboard host.
+ALLOWED_ORIGINS = "https://subarr.com,https://www.subarr.com"

@@ -1,0 +1,22 @@
+{
+  "name": "subarr-telemetry",
+  "version": "0.1.0",
+  "description": "Cloudflare Worker that receives anonymous install-heartbeat pings from self-hosted subarr instances and serves aggregated stats. Backs telemetry.subarr.com and subarr.com/stats.",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:init": "wrangler d1 execute subarr-telemetry --file=schema/001_baseline.sql",
+    "db:init:local": "wrangler d1 execute subarr-telemetry --local --file=schema/001_baseline.sql"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.6.0",
+    "@cloudflare/workers-types": "^4.20260101.0",
+    "vitest": "^2.1.0",
+    "wrangler": "^3.95.0"
+  }
+}
