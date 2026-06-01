@@ -30,7 +30,7 @@ database_name = "subarr-telemetry"
 # Stub here so the file parses; real value lives in .dev.vars (gitignored)
 # or as a CI secret. Run `wrangler d1 create subarr-telemetry` once, then
 # paste the returned UUID below before first deploy.
-database_id = "REPLACE_WITH_D1_UUID_FROM_WRANGLER_D1_CREATE"
+database_id = "a852f2e1-cbda-487d-8d92-83fb614d7a9c"
 
 [vars]
 # Soft caps. The worker rejects pings that arrive faster than this from
