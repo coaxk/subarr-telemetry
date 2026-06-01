@@ -14,9 +14,9 @@
     "db:init:local": "wrangler d1 execute subarr-telemetry --local --file=schema/001_baseline.sql"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.6.0",
+    "@cloudflare/vitest-pool-workers": "^0.16.10",
     "@cloudflare/workers-types": "^4.20260101.0",
-    "vitest": "^2.1.0",
-    "wrangler": "^3.95.0"
+    "vitest": "^4.1.8",
+    "wrangler": "^4.86.0"
   }
 }
