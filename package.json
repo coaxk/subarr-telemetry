@@ -10,7 +10,7 @@
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:init": "wrangler d1 execute subarr-telemetry --file=schema/001_baseline.sql",
+    "db:init": "wrangler d1 execute subarr-telemetry --remote --file=schema/001_baseline.sql",
     "db:init:local": "wrangler d1 execute subarr-telemetry --local --file=schema/001_baseline.sql"
   },
   "devDependencies": {
