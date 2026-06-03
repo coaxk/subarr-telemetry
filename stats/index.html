@@ -9,7 +9,10 @@
   <meta property="og:description" content="Public stats from anonymous subarr install heartbeats.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://subarr.com/stats">
-  <link rel="icon" href="/favicon.ico">
+  <!-- Inline SVG favicon: the subarr bracket-mark (violet on dark). Inline
+       so it works regardless of mount path (subarr.com/stats vs stats.subarr.com)
+       and needs no binary .ico file. -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' rx='5' fill='%23131318'/%3E%3Cpath d='M8 5 L4 5 L4 19 L8 19' fill='none' stroke='%238b5cf6' stroke-width='2' stroke-linecap='square'/%3E%3Cpath d='M16 5 L20 5 L20 19 L16 19' fill='none' stroke='%238b5cf6' stroke-width='2' stroke-linecap='square'/%3E%3Ccircle cx='12' cy='12' r='2.2' fill='%238b5cf6'/%3E%3C/svg%3E">
   <style>
     :root {
       --violet-500: #8b5cf6;
