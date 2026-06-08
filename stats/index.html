@@ -261,6 +261,17 @@
       }
     }
 
+    // Escape any value-derived string before it goes into innerHTML. The
+    // telemetry payload is attacker-controllable (anyone can POST a ping), so
+    // bucket labels / integration keys must never be trusted as markup —
+    // otherwise a crafted subgen_kind / integration key is stored XSS on this
+    // public page. Defense-in-depth alongside server-side value validation.
+    function esc(s) {
+      return String(s ?? '').replace(/[&<>"']/g, c => (
+        { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+      ));
+    }
+
     async function load() {
       // Health
       const health = await tryFetch('/v1/health');
@@ -289,7 +300,7 @@
           const pct = Math.round(((row.n || 0) / total) * 100);
           const label = row.subgen_kind || 'unknown';
           return `<div class="stat-row">
-            <span class="stat-key">${label}</span>
+            <span class="stat-key">${esc(label)}</span>
             <span class="stat-value">${row.n.toLocaleString()} · ${pct}%</span>
           </div>`;
         }).join('');
@@ -307,7 +318,7 @@
           document.getElementById('integrations').innerHTML = entries.map(([k, v]) => {
             const pct = Math.round((v / total) * 100);
             return `<div class="stat-row">
-              <span class="stat-key">${k}</span>
+              <span class="stat-key">${esc(k)}</span>
               <span class="stat-value">${v.toLocaleString()} installs · ${pct}%</span>
             </div>`;
           }).join('');

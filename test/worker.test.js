@@ -114,3 +114,58 @@ describe("validatePayload — allow-list enforcement", () => {
     expect(v.value.library_bucket).toBe("1k_10k");
   });
 });
+
+describe("validatePayload — value-level validation (anti-XSS / anti-secret)", () => {
+  const base = "abcdef1234567890";
+
+  it("rejects markup in a rendered string field (stored XSS guard)", () => {
+    const v = validatePayload({
+      install_id: base,
+      subgen_kind: '<img src=x onerror=alert(1)>',
+    });
+    expect(v.ok).toBe(false);
+    expect(v.reason).toMatch(/invalid characters/);
+  });
+
+  it("rejects markup in an integration key (rendered on stats page)", () => {
+    const v = validatePayload({
+      install_id: base,
+      integrations: { "<svg/onload=alert(1)>": true },
+    });
+    expect(v.ok).toBe(false);
+  });
+
+  it("rejects an oversize string value", () => {
+    const v = validatePayload({ install_id: base, subarr_version: "x".repeat(65) });
+    expect(v.ok).toBe(false);
+    expect(v.reason).toMatch(/too long/);
+  });
+
+  it("rejects a secret smuggled into an allowed field", () => {
+    const v = validatePayload({ install_id: base, subarr_version: "Bearer sk-abcdefghijkl" });
+    expect(v.ok).toBe(false);
+    expect(v.reason).toMatch(/secret/);
+  });
+
+  it("rejects a 32-hex (api-key-shaped) value in an allowed field", () => {
+    const v = validatePayload({ install_id: base, subgen_version: "0123456789abcdef0123456789abcdef" });
+    expect(v.ok).toBe(false);
+  });
+
+  it("rejects non-boolean/number integration values", () => {
+    const v = validatePayload({ install_id: base, integrations: { bazarr: "yes" } });
+    expect(v.ok).toBe(false);
+  });
+
+  it("rejects out-of-range walks_per_day_30d", () => {
+    expect(validatePayload({ install_id: base, walks_per_day_30d: -1 }).ok).toBe(false);
+    expect(validatePayload({ install_id: base, walks_per_day_30d: 999999 }).ok).toBe(false);
+    expect(validatePayload({ install_id: base, walks_per_day_30d: "5" }).ok).toBe(false);
+  });
+
+  it("accepts a normal walks_per_day_30d number", () => {
+    const v = validatePayload({ install_id: base, walks_per_day_30d: 12 });
+    expect(v.ok).toBe(true);
+    expect(v.value.walks_per_day_30d).toBe(12);
+  });
+});

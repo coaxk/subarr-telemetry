@@ -52,6 +52,27 @@ const FORBIDDEN_PATTERNS = [
   /^email/i, /^username$/i, /^user[_-]?name/i,
 ];
 
+// Value-level validation (defense in depth). The key-name allow/deny lists
+// above don't constrain VALUES — without this, an attacker can store markup
+// (stored XSS on the public stats page via rendered bucket labels), smuggle a
+// secret into an allowed field, or stuff 8KB of junk into a GROUP BY column.
+const MAX_STR = 64;                         // generous for versions/arch/buckets
+const XSS_CHARS = /[<>"'`]/;                // never legitimately in these fields
+const SECRET_SIG = /sk-[A-Za-z0-9]{12}|xox[baprs]-|Bearer\s|-----BEGIN|[A-Fa-f0-9]{32,}|[A-Za-z0-9+/]{40,}={0,2}/;
+// String fields that get persisted (and several rendered on stats.subarr.com).
+const VALIDATED_STRINGS = [
+  "subarr_version", "python_version", "os_arch", "docker_tier",
+  "subgen_kind", "subgen_version", "library_bucket", "scheduler_mode",
+];
+
+function badStringValue(name, val) {
+  if (typeof val !== "string") return `${name} must be a string`;
+  if (val.length > MAX_STR) return `${name} too long`;
+  if (XSS_CHARS.test(val)) return `${name} contains invalid characters`;
+  if (SECRET_SIG.test(val)) return `${name} looks like it contains a secret`;
+  return null;
+}
+
 function corsHeaders(env, origin) {
   const allowed = (env.ALLOWED_ORIGINS || "").split(",").map(s => s.trim());
   const allow = (origin && allowed.includes(origin)) ? origin : allowed[0] || "*";
@@ -99,6 +120,46 @@ export function validatePayload(raw) {
   if (/[@/.]/.test(out.install_id) && out.install_id.length < 32) {
     return { ok: false, reason: "install_id looks fingerprintable" };
   }
+
+  // --- Value-level validation (defense in depth) ---
+  // The allow/deny lists above only gate KEY names. Without this, a crafted
+  // value can (a) become stored XSS on the public stats page via a rendered
+  // bucket label, (b) smuggle a secret into an allowed field, or (c) flood a
+  // GROUP BY column. Reject the whole ping on any violation — a legit client
+  // never sends markup, secrets, or oversize strings in these fields.
+  for (const f of VALIDATED_STRINGS) {
+    if (out[f] == null) continue;
+    const bad = badStringValue(f, out[f]);
+    if (bad) return { ok: false, reason: bad };
+  }
+  if (out.walks_per_day_30d != null) {
+    const n = out.walks_per_day_30d;
+    if (typeof n !== "number" || !Number.isFinite(n) || n < 0 || n > 100000) {
+      return { ok: false, reason: "walks_per_day_30d out of range" };
+    }
+  }
+  // integrations + error_counts_30d are flat objects whose KEYS are rendered
+  // on the stats page → same XSS/secret/length rules; values must be simple.
+  for (const f of ["integrations", "error_counts_30d"]) {
+    const o = out[f];
+    if (o == null) continue;
+    if (typeof o !== "object" || Array.isArray(o)) {
+      return { ok: false, reason: `${f} must be an object` };
+    }
+    const entries = Object.entries(o);
+    if (entries.length > 64) return { ok: false, reason: `${f} has too many keys` };
+    for (const [k, v] of entries) {
+      const bad = badStringValue(`${f} key`, k);
+      if (bad) return { ok: false, reason: bad };
+      if (typeof v !== "boolean" && typeof v !== "number") {
+        return { ok: false, reason: `${f}.${k} must be a boolean or number` };
+      }
+      if (typeof v === "number" && (!Number.isFinite(v) || Math.abs(v) > 1e9)) {
+        return { ok: false, reason: `${f}.${k} out of range` };
+      }
+    }
+  }
+
   return { ok: true, value: out };
 }
 
@@ -170,6 +231,17 @@ async function recordFlood(env, installId, nowS) {
 }
 
 async function handlePing(request, env, nowS) {
+  // Per-IP edge throttle FIRST — before reading the body or touching D1 — so a
+  // flood is shed at the cheapest possible point. Keyed on CF-Connecting-IP,
+  // which the limiter uses transiently and never persists (no PII stored).
+  // Optional-chained so local/test envs without the binding still run.
+  if (env.PING_LIMITER) {
+    const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+    const { success } = await env.PING_LIMITER.limit({ key: ip });
+    if (!success) {
+      return jsonResponse({ ok: false, reason: "rate_limited" }, 429, { "Retry-After": "60" });
+    }
+  }
   const maxBytes = parseInt(env.MAX_PAYLOAD_BYTES || "8192", 10);
   const text = await request.text();
   if (text.length > maxBytes) {
@@ -275,7 +347,16 @@ async function statsIntegrations(env, nowS) {
   });
 }
 
+// Columns that statsByColumn is allowed to GROUP BY. The callers below only
+// ever pass hardcoded literals, so this is defensive — but `column` is
+// string-interpolated into SQL (D1 can't bind identifiers), so an allowlist is
+// the guardrail that keeps a future caller from turning this into injection.
+const STATS_COLUMNS = new Set(["library_bucket", "walks_per_day", "scheduler_mode"]);
+
 async function statsByColumn(env, nowS, column, windowDays = 30) {
+  if (!STATS_COLUMNS.has(column)) {
+    return jsonResponse({ error: "unknown stats column" }, 400);
+  }
   const cutoff = nowS - windowDays * 86400;
   const rows = await env.DB.prepare(
     `SELECT ${column} AS bucket, COUNT(*) AS n FROM (

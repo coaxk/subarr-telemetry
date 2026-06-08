@@ -32,6 +32,17 @@ database_name = "subarr-telemetry"
 # paste the returned UUID below before first deploy.
 database_id = "a852f2e1-cbda-487d-8d92-83fb614d7a9c"
 
+# Per-IP edge rate limiter (H1: the per-install_id throttle below is keyed on
+# an attacker-CHOSEN value, so rotating install_id defeats it — enabling
+# install-count poisoning + unbounded D1 writes). This native binding throttles
+# on CF-Connecting-IP entirely at the edge and NEVER persists the IP, so it
+# adds no fingerprintable storage. Legit telemetry is ~1 ping/day/install; even
+# a multi-install household behind one NAT won't approach 30/min.
+[[ratelimit]]
+binding = "PING_LIMITER"
+namespace_id = "1001"
+simple = { limit = 30, period = 60 }   # period must be 10 or 60
+
 [vars]
 # Soft caps. The worker rejects pings that arrive faster than this from
 # a single install_id. Daily-cadence telemetry from subarr sends once
