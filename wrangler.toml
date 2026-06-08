@@ -38,8 +38,8 @@ database_id = "a852f2e1-cbda-487d-8d92-83fb614d7a9c"
 # on CF-Connecting-IP entirely at the edge and NEVER persists the IP, so it
 # adds no fingerprintable storage. Legit telemetry is ~1 ping/day/install; even
 # a multi-install household behind one NAT won't approach 30/min.
-[[ratelimit]]
-binding = "PING_LIMITER"
+[[ratelimits]]
+name = "PING_LIMITER"
 namespace_id = "1001"
 simple = { limit = 30, period = 60 }   # period must be 10 or 60
 
