@@ -4,6 +4,78 @@
 import { describe, it, expect } from "vitest";
 import { validatePayload } from "../src/worker.js";
 
+describe("validatePayload — real client payloads (regression pins)", () => {
+  // The 2026-06-08 value-validation hardening shipped with no test using a
+  // REAL subarr payload — and silently 400-rejected every ping fleet-wide
+  // for 3 days (subarr sends docker_tier as a NUMBER; the validator
+  // demanded a string). This is subarr 1.4.0's verbatim payload: it must
+  // accept FOREVER. If a future hardening breaks this test, the hardening
+  // is wrong, not the test.
+  const SUBARR_140_PAYLOAD = {
+    install_id: "fd19004ba4e14885910c09d06ff8cc71",
+    sent_at: 1781129058.97,
+    subarr_version: "1.4.0",
+    python_version: "3.12.13",
+    os_arch: "Linux/x86_64",
+    subgen_kind: "subarr-subgen",
+    subgen_version: "2026.05.3",
+    integrations: { bazarr: true, sonarr: true, radarr: true, tautulli: true, plex: true, ollama: true },
+    library_bucket: "1k-10k",
+    scheduler_enabled: false,
+    scheduler_mode: null,
+    walks_per_day_30d: 8.63,
+    error_counts_30d: {},
+    docker_tier: 1,
+  };
+
+  it("accepts subarr 1.4.0's verbatim payload (numeric docker_tier)", () => {
+    const v = validatePayload(SUBARR_140_PAYLOAD);
+    expect(v.ok).toBe(true);
+    expect(v.value.docker_tier).toBe("1"); // coerced for storage
+  });
+
+  it("still accepts string docker_tier", () => {
+    const v = validatePayload({ ...SUBARR_140_PAYLOAD, docker_tier: "tier3" });
+    expect(v.ok).toBe(true);
+    expect(v.value.docker_tier).toBe("tier3");
+  });
+
+  it("rejects non-finite numeric docker_tier", () => {
+    const v = validatePayload({ ...SUBARR_140_PAYLOAD, docker_tier: Infinity });
+    expect(v.ok).toBe(false);
+  });
+});
+
+describe("validatePayload — crash_counts_24h (#157 Phase 2)", () => {
+  const BASE = { install_id: "abcdef1234567890", subarr_version: "1.5.0" };
+
+  it("accepts a sanitized crash-aggregate object", () => {
+    const v = validatePayload({
+      ...BASE,
+      crash_counts_24h: { "NameError:coverage_engine:1639": 4, "TimeoutError:subgen_client:142": 1 },
+    });
+    expect(v.ok).toBe(true);
+    expect(v.value.crash_counts_24h["NameError:coverage_engine:1639"]).toBe(4);
+  });
+
+  it("rejects markup in crash keys (stored-XSS guard)", () => {
+    const v = validatePayload({ ...BASE, crash_counts_24h: { "<script>:x:1": 1 } });
+    expect(v.ok).toBe(false);
+  });
+
+  it("rejects non-number crash values", () => {
+    const v = validatePayload({ ...BASE, crash_counts_24h: { "ValueError:paths:30": "lots" } });
+    expect(v.ok).toBe(false);
+  });
+
+  it("rejects more than 64 crash keys", () => {
+    const big = {};
+    for (let i = 0; i < 65; i++) big[`E${i}:mod:${i}`] = 1;
+    const v = validatePayload({ ...BASE, crash_counts_24h: big });
+    expect(v.ok).toBe(false);
+  });
+});
+
 describe("validatePayload — allow-list enforcement", () => {
   it("accepts a minimal valid payload", () => {
     const v = validatePayload({

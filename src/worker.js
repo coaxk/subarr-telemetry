@@ -38,6 +38,7 @@ const ALLOWED_FIELDS = new Set([
   "scheduler_enabled",     // legacy field, accepted but not persisted (covered by scheduler_mode)
   "walks_per_day_30d",
   "error_counts_30d",      // object, normalised into error_counts_json
+  "crash_counts_24h",      // #157 P2: object {ExcType:module:line -> count}, normalised into crashes_json
 ]);
 
 // Forbidden families. If any incoming key matches one of these patterns,
@@ -121,6 +122,15 @@ export function validatePayload(raw) {
     return { ok: false, reason: "install_id looks fingerprintable" };
   }
 
+  // subarr (≤1.4.0) sends docker_tier as a NUMBER (1|2|3). The 2026-06-08
+  // value-validation hardening required a string here and silently
+  // 400-rejected every real ping fleet-wide for 3 days. Deployed clients
+  // can't be retro-fixed → coerce finite numbers to their string form.
+  // Pinned by the verbatim-1.4.0-payload regression test.
+  if (typeof out.docker_tier === "number" && Number.isFinite(out.docker_tier)) {
+    out.docker_tier = String(out.docker_tier);
+  }
+
   // --- Value-level validation (defense in depth) ---
   // The allow/deny lists above only gate KEY names. Without this, a crafted
   // value can (a) become stored XSS on the public stats page via a rendered
@@ -138,9 +148,10 @@ export function validatePayload(raw) {
       return { ok: false, reason: "walks_per_day_30d out of range" };
     }
   }
-  // integrations + error_counts_30d are flat objects whose KEYS are rendered
-  // on the stats page → same XSS/secret/length rules; values must be simple.
-  for (const f of ["integrations", "error_counts_30d"]) {
+  // integrations + error_counts_30d + crash_counts_24h are flat objects whose
+  // KEYS are rendered on the stats page → same XSS/secret/length rules;
+  // values must be simple.
+  for (const f of ["integrations", "error_counts_30d", "crash_counts_24h"]) {
     const o = out[f];
     if (o == null) continue;
     if (typeof o !== "object" || Array.isArray(o)) {
@@ -187,6 +198,7 @@ async function recordPing(env, payload, nowS) {
   // flood_warnings if applicable, and clear them on any acceptance.
   const integrationsJson = payload.integrations ? JSON.stringify(payload.integrations) : null;
   const errorCountsJson = payload.error_counts_30d ? JSON.stringify(payload.error_counts_30d) : null;
+  const crashesJson = payload.crash_counts_24h ? JSON.stringify(payload.crash_counts_24h) : null;
   const rawPayloadJson = JSON.stringify(payload);
   await env.DB.batch([
     env.DB.prepare(
@@ -195,8 +207,8 @@ async function recordPing(env, payload, nowS) {
          subarr_version, python_version, os_arch, docker_tier,
          subgen_kind, subgen_version,
          integrations_json, library_bucket, scheduler_mode,
-         walks_per_day, error_counts_json, raw_payload_json
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         walks_per_day, error_counts_json, crashes_json, raw_payload_json
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).bind(
       payload.install_id, nowS, payload.sent_at ?? null,
       payload.subarr_version ?? null, payload.python_version ?? null,
@@ -205,7 +217,7 @@ async function recordPing(env, payload, nowS) {
       integrationsJson, payload.library_bucket ?? null,
       payload.scheduler_mode ?? null,
       payload.walks_per_day_30d ?? null,
-      errorCountsJson, rawPayloadJson,
+      errorCountsJson, crashesJson, rawPayloadJson,
     ),
     env.DB.prepare(
       `INSERT INTO install_state (install_id, last_accepted_at, flood_warnings, flagged)
