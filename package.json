@@ -10,9 +10,8 @@
     "deploy": "wrangler deploy",
     "test": "vitest run",
     "test:watch": "vitest",
-    "db:init": "wrangler d1 execute subarr-telemetry --remote --file=schema/001_baseline.sql && wrangler d1 execute subarr-telemetry --remote --file=schema/002_crashes.sql",
-    "db:init:local": "wrangler d1 execute subarr-telemetry --local --file=schema/001_baseline.sql && wrangler d1 execute subarr-telemetry --local --file=schema/002_crashes.sql",
-    "db:migrate:002": "wrangler d1 execute subarr-telemetry --remote --file=schema/002_crashes.sql"
+    "db:migrate": "wrangler d1 migrations apply subarr-telemetry --remote",
+    "db:migrate:local": "wrangler d1 migrations apply subarr-telemetry --local"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.16.10",

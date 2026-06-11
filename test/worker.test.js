@@ -2,7 +2,33 @@
 // fetch test (HTTP end-to-end) lives in worker.integration.test.js and
 // requires the @cloudflare/vitest-pool-workers runtime.
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { validatePayload } from "../src/worker.js";
+
+describe("validatePayload — real-fleet corpus replay", () => {
+  // 60 verbatim raw_payload_json rows sampled from production D1 across
+  // every subarr version in the wild (0.1.0 → 1.5.x), install_ids rewritten
+  // to synthetic hex. EVERY payload a real client ever successfully sent
+  // must validate forever — this single test would have caught BOTH the
+  // docker_tier and library_bucket fleet outages before deploy. If a
+  // hardening change fails this test, the hardening is wrong, not the
+  // corpus. Refresh occasionally: see issue #1 for the sampling query.
+  const corpus = JSON.parse(
+    readFileSync(fileURLToPath(new URL("./corpus/real-pings.json", import.meta.url)), "utf8"),
+  );
+
+  it("loads a meaningfully sized corpus", () => {
+    expect(corpus.length).toBeGreaterThanOrEqual(50);
+  });
+
+  for (const [i, payload] of corpus.entries()) {
+    it(`accepts corpus payload ${i} (subarr ${payload.subarr_version})`, () => {
+      const v = validatePayload(payload);
+      expect(v.ok, `rejected: ${v.reason}`).toBe(true);
+    });
+  }
+});
 
 describe("validatePayload — real client payloads (regression pins)", () => {
   // The 2026-06-08 value-validation hardening shipped with no test using a

@@ -72,7 +72,7 @@ npm test                   # unit tests
 wrangler login
 wrangler d1 create subarr-telemetry
 # Copy the returned UUID into wrangler.toml's database_id field
-npm run db:init            # apply schema/001_baseline.sql to remote D1
+npm run db:migrate         # apply pending migrations/ to remote D1 (tracked, idempotent; CI runs this before every deploy)
 wrangler deploy
 
 # Then in the Cloudflare dashboard:
