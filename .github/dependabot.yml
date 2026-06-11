@@ -1,0 +1,14 @@
+# Keep the worker's dev toolchain (wrangler, vitest) and CI actions patched.
+# Mirrors the config on coaxk/subarr; added 2026-06-12 after the gap review
+# noticed this repo was missing it.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
