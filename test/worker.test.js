@@ -44,6 +44,26 @@ describe("validatePayload — real client payloads (regression pins)", () => {
     const v = validatePayload({ ...SUBARR_140_PAYLOAD, docker_tier: Infinity });
     expect(v.ok).toBe(false);
   });
+
+  // Every bucket literal subarr has EVER shipped must accept forever. The
+  // 06-08 hardening's XSS_CHARS check 400-rejected "<100" — the bucket
+  // ~99.5% of the fleet reports (installs that never ran a probe walk) —
+  // silently cutting fleet telemetry to near zero even after the
+  // docker_tier fix. Field validation on non-critical fields must drop the
+  // FIELD, never the ping.
+  for (const bucket of ["<100", "100-1k", "1k-10k", ">10k", "unknown"]) {
+    it(`accepts library_bucket ${JSON.stringify(bucket)}`, () => {
+      const v = validatePayload({ ...SUBARR_140_PAYLOAD, library_bucket: bucket });
+      expect(v.ok).toBe(true);
+      expect(v.value.library_bucket).toBe(bucket);
+    });
+  }
+
+  it("drops an unknown library_bucket instead of rejecting the ping", () => {
+    const v = validatePayload({ ...SUBARR_140_PAYLOAD, library_bucket: "<script>alert(1)</script>" });
+    expect(v.ok).toBe(true);
+    expect(v.value.library_bucket).toBeNull();
+  });
 });
 
 describe("validatePayload — crash_counts_24h (#157 Phase 2)", () => {

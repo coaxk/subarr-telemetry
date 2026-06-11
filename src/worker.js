@@ -61,10 +61,28 @@ const MAX_STR = 64;                         // generous for versions/arch/bucket
 const XSS_CHARS = /[<>"'`]/;                // never legitimately in these fields
 const SECRET_SIG = /sk-[A-Za-z0-9]{12}|xox[baprs]-|Bearer\s|-----BEGIN|[A-Fa-f0-9]{32,}|[A-Za-z0-9+/]{40,}={0,2}/;
 // String fields that get persisted (and several rendered on stats.subarr.com).
+// library_bucket is NOT in this list: subarr has always sent the literals
+// "<100" and ">10k", whose angle brackets trip XSS_CHARS — the 06-08
+// hardening silently 400-rejected ~99.5% of the fleet on exactly that
+// (every install that never ran a probe walk reports "<100"). It gets an
+// exact-match allowlist instead (see validatePayload), which is BOTH safer
+// (no arbitrary string ever stored/rendered) and compatible.
 const VALIDATED_STRINGS = [
   "subarr_version", "python_version", "os_arch", "docker_tier",
-  "subgen_kind", "subgen_version", "library_bucket", "scheduler_mode",
+  "subgen_kind", "subgen_version", "scheduler_mode",
 ];
+
+// The bucket literals every shipped subarr version emits. An unknown value
+// drops the FIELD (stored as null), never the ping — field-level violations
+// on non-critical display fields must not cost us the whole fleet again.
+// Both families: the angle/hyphen literals real clients send (verified in
+// D1: "<100" alone = ~99.5% of the fleet) AND the underscore variants the
+// original worker spec imagined — harmless to accept, and the old tests pin
+// them.
+const LIBRARY_BUCKETS = new Set([
+  "<100", "100-1k", "1k-10k", ">10k", "unknown",
+  "under_100", "100_1k", "1k_10k", "over_10k",
+]);
 
 function badStringValue(name, val) {
   if (typeof val !== "string") return `${name} must be a string`;
@@ -141,6 +159,11 @@ export function validatePayload(raw) {
     if (out[f] == null) continue;
     const bad = badStringValue(f, out[f]);
     if (bad) return { ok: false, reason: bad };
+  }
+  // library_bucket: exact-match allowlist (see LIBRARY_BUCKETS comment).
+  // Unknown/invalid values drop the field, not the ping.
+  if (out.library_bucket != null && !LIBRARY_BUCKETS.has(out.library_bucket)) {
+    out.library_bucket = null;
   }
   if (out.walks_per_day_30d != null) {
     const n = out.walks_per_day_30d;
