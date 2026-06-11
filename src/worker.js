@@ -421,6 +421,25 @@ const ROUTES = {
   "GET /v1/stats/scheduler-modes": (req, env, now) => statsByColumn(env, now, "scheduler_mode"),
 };
 
+// Public read-only aggregates change at most once per ping cycle (daily),
+// so edge-cache them: a front-page link (r/sonarr etc.) would otherwise hit
+// D1 uncached on every page load. With this, each CF colo collapses its
+// herd to ~one D1 read per TTL. /ping + /health stay uncached (no-store).
+const STATS_CACHE_TTL_S = 300;
+
+export function isCacheableStats(method, pathname) {
+  return method === "GET" && pathname.startsWith("/v1/stats/");
+}
+
+function withCors(res, cors) {
+  // Clone so we never mutate a cached Response's immutable headers, and so a
+  // cross-origin hit gets ITS Access-Control-Allow-Origin, not the first
+  // caller's (the cached copy is stored without CORS headers).
+  const out = new Response(res.body, res);
+  for (const [k, v] of Object.entries(cors)) out.headers.set(k, v);
+  return out;
+}
+
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
@@ -429,6 +448,14 @@ export default {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: cors });
     }
+
+    const cacheable = isCacheableStats(request.method, url.pathname);
+    const cache = caches.default;
+    if (cacheable) {
+      const hit = await cache.match(request);
+      if (hit) return withCors(hit, cors);
+    }
+
     const key = `${request.method} ${url.pathname}`;
     const handler = ROUTES[key];
     if (!handler) {
@@ -437,9 +464,14 @@ export default {
     const nowS = Math.floor(Date.now() / 1000);
     try {
       const res = await handler(request, env, nowS);
-      // Merge CORS into whatever the handler returned.
-      for (const [k, v] of Object.entries(cors)) res.headers.set(k, v);
-      return res;
+      if (cacheable && res.status === 200) {
+        // Make it edge-cacheable, then store a CORS-free copy (CORS is added
+        // fresh per request above + below). waitUntil so caching never delays
+        // the response.
+        res.headers.set("Cache-Control", `public, s-maxage=${STATS_CACHE_TTL_S}, max-age=${STATS_CACHE_TTL_S}`);
+        ctx.waitUntil(cache.put(request, res.clone()));
+      }
+      return withCors(res, cors);
     } catch (e) {
       console.error("worker error:", e?.stack || e);
       return jsonResponse({ ok: false, reason: "internal error" }, 500, cors);

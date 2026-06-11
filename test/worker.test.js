@@ -4,7 +4,21 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { validatePayload } from "../src/worker.js";
+import { validatePayload, isCacheableStats } from "../src/worker.js";
+
+describe("isCacheableStats — edge-cache only the public read aggregates", () => {
+  it("caches GET /v1/stats/*", () => {
+    expect(isCacheableStats("GET", "/v1/stats/installs")).toBe(true);
+    expect(isCacheableStats("GET", "/v1/stats/subgen-mix")).toBe(true);
+  });
+  it("never caches the ping ingest or health", () => {
+    expect(isCacheableStats("POST", "/v1/ping")).toBe(false);
+    expect(isCacheableStats("GET", "/v1/health")).toBe(false);
+  });
+  it("only caches GET (a stats POST, if any, is not cached)", () => {
+    expect(isCacheableStats("POST", "/v1/stats/installs")).toBe(false);
+  });
+});
 
 describe("validatePayload — real-fleet corpus replay", () => {
   // 60 verbatim raw_payload_json rows sampled from production D1 across
