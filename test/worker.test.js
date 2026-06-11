@@ -104,6 +104,30 @@ describe("validatePayload — real client payloads (regression pins)", () => {
     expect(v.ok).toBe(true);
     expect(v.value.library_bucket).toBeNull();
   });
+
+  it("accepts install_age_days + data_persistent", () => {
+    const v = validatePayload({ ...SUBARR_140_PAYLOAD, install_age_days: 42.0, data_persistent: true });
+    expect(v.ok).toBe(true);
+    expect(v.value.install_age_days).toBe(42.0);
+    expect(v.value.data_persistent).toBe(true);
+  });
+
+  it("drops a bad install_age_days / data_persistent, never rejects the ping", () => {
+    const v = validatePayload({
+      ...SUBARR_140_PAYLOAD,
+      install_age_days: "ancient",
+      data_persistent: "yes",
+    });
+    expect(v.ok).toBe(true);
+    expect(v.value.install_age_days).toBeNull();
+    expect(v.value.data_persistent).toBeNull();
+  });
+
+  it("forwards-compatible: a future field is dropped, ping still accepted", () => {
+    const v = validatePayload({ ...SUBARR_140_PAYLOAD, some_future_metric: 7 });
+    expect(v.ok).toBe(true);
+    expect(v.value.some_future_metric).toBeUndefined();
+  });
 });
 
 describe("validatePayload — crash_counts_24h (#157 Phase 2)", () => {

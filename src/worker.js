@@ -39,6 +39,8 @@ const ALLOWED_FIELDS = new Set([
   "walks_per_day_30d",
   "error_counts_30d",      // object, normalised into error_counts_json
   "crash_counts_24h",      // #157 P2: object {ExcType:module:line -> count}, normalised into crashes_json
+  "install_age_days",      // retention signal: days since this install_id was created
+  "data_persistent",       // bool: is /data a real mount vs the container's ephemeral layer
 ]);
 
 // Forbidden families. If any incoming key matches one of these patterns,
@@ -171,6 +173,18 @@ export function validatePayload(raw) {
       return { ok: false, reason: "walks_per_day_30d out of range" };
     }
   }
+  // install_age_days / data_persistent: non-critical signals — an invalid
+  // value DROPS THE FIELD, never the ping (the library_bucket lesson:
+  // a display/analytics field must not cost us the whole fleet).
+  if (out.install_age_days != null) {
+    const n = out.install_age_days;
+    if (typeof n !== "number" || !Number.isFinite(n) || n < 0 || n > 100000) {
+      out.install_age_days = null;
+    }
+  }
+  if (out.data_persistent != null && typeof out.data_persistent !== "boolean") {
+    out.data_persistent = null;
+  }
   // integrations + error_counts_30d + crash_counts_24h are flat objects whose
   // KEYS are rendered on the stats page → same XSS/secret/length rules;
   // values must be simple.
@@ -230,8 +244,9 @@ async function recordPing(env, payload, nowS) {
          subarr_version, python_version, os_arch, docker_tier,
          subgen_kind, subgen_version,
          integrations_json, library_bucket, scheduler_mode,
-         walks_per_day, error_counts_json, crashes_json, raw_payload_json
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         walks_per_day, error_counts_json, crashes_json,
+         install_age_days, data_persistent, raw_payload_json
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).bind(
       payload.install_id, nowS, payload.sent_at ?? null,
       payload.subarr_version ?? null, payload.python_version ?? null,
@@ -240,7 +255,10 @@ async function recordPing(env, payload, nowS) {
       integrationsJson, payload.library_bucket ?? null,
       payload.scheduler_mode ?? null,
       payload.walks_per_day_30d ?? null,
-      errorCountsJson, crashesJson, rawPayloadJson,
+      errorCountsJson, crashesJson,
+      payload.install_age_days ?? null,
+      payload.data_persistent == null ? null : (payload.data_persistent ? 1 : 0),
+      rawPayloadJson,
     ),
     env.DB.prepare(
       `INSERT INTO install_state (install_id, last_accepted_at, flood_warnings, flagged)
