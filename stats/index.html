@@ -215,6 +215,12 @@
       <div id="integrations"><div class="stat-row"><span class="stat-key">loading…</span><span class="stat-value pending">—</span></div></div>
     </div>
 
+    <div class="card">
+      <h2>version adoption</h2>
+      <p style="font-size:13px;color:var(--fg-2);">Latest known subarr version per install, last 30 days (7-day numbers in parentheses where they differ).</p>
+      <div id="versions"><div class="stat-row"><span class="stat-key">loading…</span><span class="stat-value pending">—</span></div></div>
+    </div>
+
     <div class="privacy">
       <h2>What's not on this page</h2>
       <p>
@@ -326,6 +332,36 @@
           document.getElementById('integrations').innerHTML =
             '<div class="stat-row"><span class="stat-key">no data yet</span><span class="stat-value pending">—</span></div>';
         }
+      }
+
+      // Version adoption (30d distribution, 7d overlay for rollout watching)
+      const [v30, v7] = await Promise.all([
+        tryFetch('/v1/stats/versions'),
+        tryFetch('/v1/stats/versions-7d'),
+      ]);
+      if (v30 && v30.distribution) {
+        const seven = {};
+        for (const row of (v7 && v7.distribution) || []) seven[row.bucket || 'unknown'] = row.n || 0;
+        const rows = [...v30.distribution]
+          .map(r => ({ v: r.bucket || 'unknown', n: r.n || 0 }))
+          .sort((a, b) => b.n - a.n);
+        const total = rows.reduce((a, b) => a + b.n, 0) || 1;
+        const top = rows.slice(0, 10);
+        const rest = rows.slice(10).reduce((a, b) => a + b.n, 0);
+        let html = top.map(({ v, n }) => {
+          const pct = Math.round((n / total) * 100);
+          const n7 = seven[v];
+          const sevenNote = (n7 != null && n7 !== n) ? ` (${n7.toLocaleString()} in 7d)` : '';
+          return `<div class="stat-row">
+            <span class="stat-key">${esc(v)}</span>
+            <span class="stat-value">${n.toLocaleString()} · ${pct}%${esc(sevenNote)}</span>
+          </div>`;
+        }).join('');
+        if (rest > 0) {
+          html += `<div class="stat-row"><span class="stat-key">others</span><span class="stat-value">${rest.toLocaleString()}</span></div>`;
+        }
+        document.getElementById('versions').innerHTML = html ||
+          '<div class="stat-row"><span class="stat-key">no data yet</span><span class="stat-value pending">—</span></div>';
       }
     }
 

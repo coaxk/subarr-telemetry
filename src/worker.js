@@ -8,6 +8,8 @@
 //   GET  /v1/stats/library-size       — distribution across library buckets
 //   GET  /v1/stats/walks-per-day      — distribution across cadence buckets
 //   GET  /v1/stats/scheduler-modes    — manual_confirm vs auto_queue vs disabled
+//   GET  /v1/stats/versions           — subarr version distribution (30d window)
+//   GET  /v1/stats/versions-7d        — same, 7d window (release-rollout watching)
 //   GET  /v1/health                   — worker liveness (no DB hit)
 //
 // All POSTs respect a per-install rate limit (env.MIN_INTERVAL_S). Pings
@@ -404,7 +406,7 @@ async function statsIntegrations(env, nowS) {
 // ever pass hardcoded literals, so this is defensive — but `column` is
 // string-interpolated into SQL (D1 can't bind identifiers), so an allowlist is
 // the guardrail that keeps a future caller from turning this into injection.
-const STATS_COLUMNS = new Set(["library_bucket", "walks_per_day", "scheduler_mode"]);
+const STATS_COLUMNS = new Set(["library_bucket", "walks_per_day", "scheduler_mode", "subarr_version"]);
 
 async function statsByColumn(env, nowS, column, windowDays = 30) {
   if (!STATS_COLUMNS.has(column)) {
@@ -437,6 +439,11 @@ const ROUTES = {
   "GET /v1/stats/library-size": (req, env, now) => statsByColumn(env, now, "library_bucket"),
   "GET /v1/stats/walks-per-day": (req, env, now) => statsByColumn(env, now, "walks_per_day"),
   "GET /v1/stats/scheduler-modes": (req, env, now) => statsByColumn(env, now, "scheduler_mode"),
+  // Version adoption — the release-rollout instrument. 30d = the fleet
+  // picture; 7d = fresh enough to watch a release (or a launch-post influx)
+  // land in near-real-time. Edge-cached like every stats read.
+  "GET /v1/stats/versions": (req, env, now) => statsByColumn(env, now, "subarr_version"),
+  "GET /v1/stats/versions-7d": (req, env, now) => statsByColumn(env, now, "subarr_version", 7),
 };
 
 // Public read-only aggregates change at most once per ping cycle (daily),
