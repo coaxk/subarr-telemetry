@@ -43,6 +43,8 @@ const ALLOWED_FIELDS = new Set([
   "crash_counts_24h",      // #157 P2: object {ExcType:module:line -> count}, normalised into crashes_json
   "install_age_days",      // retention signal: days since this install_id was created
   "data_persistent",       // bool: is /data a real mount vs the container's ephemeral layer
+  "onboarding_step",       // #202: coarse furthest onboarding step reached (0-11)
+  "onboarding_complete",   // #202: bool — did they finish the wizard
 ]);
 
 // Forbidden families. If any incoming key matches one of these patterns,
@@ -187,6 +189,17 @@ export function validatePayload(raw) {
   if (out.data_persistent != null && typeof out.data_persistent !== "boolean") {
     out.data_persistent = null;
   }
+  // #202 onboarding funnel: coarse non-critical signals — invalid values DROP
+  // THE FIELD, never the ping.
+  if (out.onboarding_step != null) {
+    const n = out.onboarding_step;
+    if (typeof n !== "number" || !Number.isInteger(n) || n < 0 || n > 99) {
+      out.onboarding_step = null;
+    }
+  }
+  if (out.onboarding_complete != null && typeof out.onboarding_complete !== "boolean") {
+    out.onboarding_complete = null;
+  }
   // integrations + error_counts_30d + crash_counts_24h are flat objects whose
   // KEYS are rendered on the stats page → same XSS/secret/length rules;
   // values must be simple.
@@ -247,8 +260,9 @@ async function recordPing(env, payload, nowS) {
          subgen_kind, subgen_version,
          integrations_json, library_bucket, scheduler_mode,
          walks_per_day, error_counts_json, crashes_json,
-         install_age_days, data_persistent, raw_payload_json
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         install_age_days, data_persistent,
+         onboarding_step, onboarding_complete, raw_payload_json
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).bind(
       payload.install_id, nowS, payload.sent_at ?? null,
       payload.subarr_version ?? null, payload.python_version ?? null,
@@ -260,6 +274,8 @@ async function recordPing(env, payload, nowS) {
       errorCountsJson, crashesJson,
       payload.install_age_days ?? null,
       payload.data_persistent == null ? null : (payload.data_persistent ? 1 : 0),
+      payload.onboarding_step ?? null,
+      payload.onboarding_complete == null ? null : (payload.onboarding_complete ? 1 : 0),
       rawPayloadJson,
     ),
     env.DB.prepare(
