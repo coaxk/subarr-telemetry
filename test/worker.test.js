@@ -123,6 +123,24 @@ describe("validatePayload — real client payloads (regression pins)", () => {
     expect(v.value.data_persistent).toBeNull();
   });
 
+  it("accepts onboarding_step + onboarding_complete (#202)", () => {
+    const v = validatePayload({ ...SUBARR_140_PAYLOAD, onboarding_step: 2, onboarding_complete: false });
+    expect(v.ok).toBe(true);
+    expect(v.value.onboarding_step).toBe(2);
+    expect(v.value.onboarding_complete).toBe(false);
+  });
+
+  it("drops a bad onboarding_step / onboarding_complete, never rejects the ping", () => {
+    const v = validatePayload({
+      ...SUBARR_140_PAYLOAD,
+      onboarding_step: 999,        // out of range
+      onboarding_complete: "yep",  // wrong type
+    });
+    expect(v.ok).toBe(true);
+    expect(v.value.onboarding_step).toBeNull();
+    expect(v.value.onboarding_complete).toBeNull();
+  });
+
   it("forwards-compatible: a future field is dropped, ping still accepted", () => {
     const v = validatePayload({ ...SUBARR_140_PAYLOAD, some_future_metric: 7 });
     expect(v.ok).toBe(true);
