@@ -32,6 +32,40 @@
 -- ============================================================================
 
 
+-- ============================================================================
+-- WHAT THIS FOUND, 2026-08-30 (baseline for future re-runs)
+-- ============================================================================
+-- The artefact check fired. The premise of #202 did not survive.
+--
+--   A0/A1: 99.0% of distinct install_ids pinged EXACTLY ONCE over 30 days
+--          (17,083 of 17,258). By client version the signature is exact:
+--            1.5.2  5,471 installs / 5,471 pings = 1.00 per install
+--            1.1.0  1,476 installs / 1,490 pings = 1.01
+--            2.5.0    134 installs / 1,187 pings = 8.86  <- current, normal
+--          1.00 pings per install across thousands of rows is a fresh id per
+--          PING, not user churn. data_persistent=1 installs average 25.71 days
+--          old; the NULL cohort averages 0.73. A 35x gap.
+--
+--   B1:    On installs that pinged more than once, taking each install's most
+--          recent bucket: 56.6% have real libraries (100+ files), against the
+--          0.5% the issue reports. n=175.
+--
+--   C1/C2: The genuine drop-off is onboarding COMPLETION.
+--            completed  113 installs, 26% still under_100, 51 walking
+--            not        57 installs,  77% still under_100,  9 walking
+--          One in three genuine installs never finishes onboarding.
+--
+-- Conclusion: a measurement fault, not an activation failure. Filed as #473
+-- (install_id does not persist). The user-facing harm is losing history on
+-- restart; the telemetry inflation is the visible symptom, not the point.
+--
+-- ⚠️ "More than one ping" is a PROXY for genuine, not proof: a real install
+-- that arrived today pings once and is excluded, so 175 understates the true
+-- population. It does not affect the conclusion, which rests on the
+-- 1.00-pings-per-install signature.
+-- ============================================================================
+
+
 -- A0. Is the denominator real? Persistence vs install age.
 -- Expect: if data_persistent=0 rows skew to age ~0, we are counting restarts.
 SELECT
