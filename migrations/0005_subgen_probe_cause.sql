@@ -1,0 +1,26 @@
+-- 0005_subgen_probe_cause.sql
+--
+-- subarr #479: split the `unreachable` bucket.
+--
+-- subgen_kind='unreachable' covered 108 genuine installs (50.5% of the real
+-- userbase) with no way to tell any of its causes apart. It is returned from
+-- two structurally different conditions in subarr's probe: a transport error,
+-- and a non-200 response meaning something IS listening but is not a healthy
+-- subgen.
+--
+--   subgen_probe_failure     one token from a CLOSED vocabulary:
+--                            dns | refused | connect_timeout | read_timeout |
+--                            timeout | tls | transport | not_probed |
+--                            http_<code> | http_other.
+--                            NULL when subgen is reachable.
+--                            ⚠️ 'not_probed' means the probe never ran, which
+--                            is NOT the same as a probe that ran and failed.
+--   subgen_target_is_default 1 when the install is still on the shipped
+--                            SUBGEN_URL (http://subgen:9000), i.e. never
+--                            configured. NULL = unknown (client too old).
+--
+-- Neither column can hold a hostname, URL, port or exception message. The
+-- worker's enumerated INSERT is the enforcement layer, as with every other
+-- column here.
+ALTER TABLE pings ADD COLUMN subgen_probe_failure TEXT;
+ALTER TABLE pings ADD COLUMN subgen_target_is_default INTEGER;

@@ -45,6 +45,10 @@ const ALLOWED_FIELDS = new Set([
   "data_persistent",       // bool: is /data a real mount vs the container's ephemeral layer
   "onboarding_step",       // #202: coarse furthest onboarding step reached (0-11)
   "onboarding_complete",   // #202: bool — did they finish the wizard
+  // #479: split the `unreachable` bucket. Neither can carry a hostname,
+  // URL, port or exception text.
+  "subgen_probe_failure",     // closed vocabulary, NULL when reachable
+  "subgen_target_is_default", // still on the shipped SUBGEN_URL
 ]);
 
 // Forbidden families. If any incoming key matches one of these patterns,
@@ -261,8 +265,10 @@ async function recordPing(env, payload, nowS) {
          integrations_json, library_bucket, scheduler_mode,
          walks_per_day, error_counts_json, crashes_json,
          install_age_days, data_persistent,
-         onboarding_step, onboarding_complete, raw_payload_json
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+         onboarding_step, onboarding_complete,
+         subgen_probe_failure, subgen_target_is_default,
+         raw_payload_json
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).bind(
       payload.install_id, nowS, payload.sent_at ?? null,
       payload.subarr_version ?? null, payload.python_version ?? null,
@@ -276,6 +282,10 @@ async function recordPing(env, payload, nowS) {
       payload.data_persistent == null ? null : (payload.data_persistent ? 1 : 0),
       payload.onboarding_step ?? null,
       payload.onboarding_complete == null ? null : (payload.onboarding_complete ? 1 : 0),
+      payload.subgen_probe_failure ?? null,
+      payload.subgen_target_is_default == null
+        ? null
+        : (payload.subgen_target_is_default ? 1 : 0),
       rawPayloadJson,
     ),
     env.DB.prepare(
