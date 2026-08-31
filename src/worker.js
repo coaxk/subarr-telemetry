@@ -352,11 +352,73 @@ async function handlePing(request, env, nowS) {
 
 // ─── Aggregation endpoints ──────────────────────────────────────────
 
-// Total active installs in the last N days, computed from distinct
-// install_ids in `pings` with received_at within the window.
+// A "genuine" install: one we have positive evidence is a real installation
+// rather than a fresh install_id minted by a container whose /data was never
+// a real mount (subarr #473).
+//
+// Why this exists. Until #473 was found, every count here was
+// COUNT(DISTINCT install_id) over raw pings. An install that loses its
+// database on each recreate mints a new id every time, so one user restarting
+// 40 times read as 40 installs. Measured 2026-08-31: 22,840 of 23,426 distinct
+// ids had never sent a second ping, averaging 1.04 pings each, against 16.5
+// for ids that report a persistent /data. The published "17,417 active
+// installs" was roughly 80x the truth.
+//
+// It distorted SHAPE, not just scale, which is the part that made it
+// dangerous. The version chart showed 1.5.2 at 6,967 and 2.5.0 at 163,
+// implying nobody upgrades. Filtered, it is 2.5.0 at 134 and 1.5.2 at 1: the
+// ancient versions are precisely the ones whose README told people to mount
+// /config, so they churn ids forever while current versions persist and count
+// once. The chart was reporting the opposite of the truth.
+//
+// Two independent signals, OR'd, because neither alone is sufficient:
+//
+//   data_persistent = 1
+//       The client checked its own /data and reported a real mount. Only
+//       clients from the migration-0003 era onward send it at all, so on its
+//       own it silently discards every genuine install on an older client.
+//
+//   seen on >= 2 distinct UTC days
+//       Recurrence. Client-version independent, so it rescues the old-client
+//       installs the flag cannot see (60 of them at time of writing). On its
+//       own it would exclude genuine installs that arrived today and have only
+//       pinged once, which is why the flag is kept alongside it.
+//
+// ⚠️ This is EVIDENCE OF GENUINE, not proof of the negative. An install
+// excluded here is one we cannot yet vouch for, not one proven fake. A real
+// install that arrived today on an old client is excluded until its second
+// day. The bias is deliberately toward undercounting: a public number that is
+// too low is a smaller lie than one that is 80x too high.
+export const GENUINE_INSTALLS_SQL = `
+  SELECT install_id FROM pings
+  GROUP BY install_id
+  HAVING MAX(COALESCE(data_persistent, 0)) = 1
+      OR COUNT(DISTINCT CAST(received_at / 86400 AS INTEGER)) >= 2
+`;
+
+
+// Active installs in the last N days.
+//
+// active_* / total_ever count GENUINE installs (see GENUINE_INSTALLS_SQL).
+// The unfiltered numbers are still published as raw_*, because they are what
+// this endpoint returned before 2026-08-31 and dropping them silently would
+// make the historical series unexplainable. They are not the headline: raw
+// counts distinct install_ids, and a churning install mints a new one on every
+// restart.
 async function statsInstalls(env, nowS) {
   const day = 86400;
-  const [d7, d30, total] = await Promise.all([
+  const [d7, d30, total, raw7, raw30, rawTotal] = await Promise.all([
+    env.DB.prepare(
+      `SELECT COUNT(DISTINCT install_id) AS n FROM pings
+       WHERE received_at > ? AND install_id IN (${GENUINE_INSTALLS_SQL})`
+    ).bind(nowS - 7 * day).first(),
+    env.DB.prepare(
+      `SELECT COUNT(DISTINCT install_id) AS n FROM pings
+       WHERE received_at > ? AND install_id IN (${GENUINE_INSTALLS_SQL})`
+    ).bind(nowS - 30 * day).first(),
+    env.DB.prepare(
+      `SELECT COUNT(*) AS n FROM (${GENUINE_INSTALLS_SQL})`
+    ).first(),
     env.DB.prepare("SELECT COUNT(DISTINCT install_id) AS n FROM pings WHERE received_at > ?")
       .bind(nowS - 7 * day).first(),
     env.DB.prepare("SELECT COUNT(DISTINCT install_id) AS n FROM pings WHERE received_at > ?")
@@ -367,6 +429,14 @@ async function statsInstalls(env, nowS) {
     active_7d: d7?.n ?? 0,
     active_30d: d30?.n ?? 0,
     total_ever: total?.n ?? 0,
+    raw_active_7d: raw7?.n ?? 0,
+    raw_active_30d: raw30?.n ?? 0,
+    raw_total_ever: rawTotal?.n ?? 0,
+    counting: "genuine",
+    counting_note:
+      "Genuine = reported a persistent /data, or seen on 2+ distinct days. " +
+      "raw_* counts every distinct install_id, which subarr#473 inflates " +
+      "because an install with an ephemeral /data mints a new id per restart.",
     computed_at: nowS,
   });
 }
@@ -381,6 +451,7 @@ async function statsSubgenMix(env, nowS) {
        SELECT install_id, subgen_kind FROM pings p
        WHERE received_at > ?
          AND received_at = (SELECT MAX(received_at) FROM pings WHERE install_id = p.install_id)
+         AND p.install_id IN (${GENUINE_INSTALLS_SQL})
      ) GROUP BY subgen_kind`
   ).bind(cutoff).all();
   return jsonResponse({
@@ -397,6 +468,7 @@ async function statsIntegrations(env, nowS) {
     `SELECT integrations_json FROM pings p
      WHERE received_at > ?
        AND received_at = (SELECT MAX(received_at) FROM pings WHERE install_id = p.install_id)
+       AND p.install_id IN (${GENUINE_INSTALLS_SQL})
        AND integrations_json IS NOT NULL`
   ).bind(cutoff).all();
   const counts = {};
@@ -434,6 +506,7 @@ async function statsByColumn(env, nowS, column, windowDays = 30) {
        SELECT install_id, ${column} FROM pings p
        WHERE received_at > ?
          AND received_at = (SELECT MAX(received_at) FROM pings WHERE install_id = p.install_id)
+         AND p.install_id IN (${GENUINE_INSTALLS_SQL})
      ) GROUP BY ${column}`
   ).bind(cutoff).all();
   return jsonResponse({
