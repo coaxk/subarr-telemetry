@@ -14,9 +14,8 @@
     "db:migrate:local": "wrangler d1 migrations apply subarr-telemetry --local"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "^0.16.10",
-    "@cloudflare/workers-types": "^4.20260101.0",
-    "vitest": "^4.1.8",
-    "wrangler": "^4.86.0"
+    "@cloudflare/workers-types": "^5.20260823.1",
+    "vitest": "^4.1.11",
+    "wrangler": "^4.125.0"
   }
 }
