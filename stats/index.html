@@ -189,6 +189,10 @@
 
     <div class="card">
       <h2>active installs</h2>
+      <p style="font-size:13px;color:var(--fg-2);">
+        Installs we can positively identify as real: they reported a persistent
+        <code style="color:var(--fg-1);">/data</code> mount, or we have seen them on more than one day.
+      </p>
       <div class="stat-row">
         <span class="stat-key">last 7 days</span>
         <span class="stat-value" id="active-7d">—</span>
@@ -201,6 +205,31 @@
         <span class="stat-key">total ever</span>
         <span class="stat-value" id="total-ever">—</span>
       </div>
+      <details style="margin-top:14px;">
+        <summary style="font-size:13px;color:var(--fg-2);cursor:pointer;">
+          Why this number fell sharply on 2026-08-31
+        </summary>
+        <p style="font-size:13px;color:var(--fg-2);line-height:1.6;margin-top:10px;">
+          Until then this page counted every distinct install id, and that ran roughly 80 times
+          too high. Subarr keeps its id in its database, and our own v1.0 and v1.1 setup docs
+          told people to mount the wrong directory, so those installs lost the database on every
+          restart and minted a fresh id each time. One person restarting forty times counted as
+          forty installs. Of 23,426 ids ever seen, 22,840 had never sent a second ping.
+        </p>
+        <p style="font-size:13px;color:var(--fg-2);line-height:1.6;margin-top:10px;">
+          The fix is <a href="https://github.com/coaxk/subarr/issues/473" style="color:var(--cyan-400);text-decoration:none;">subarr#473</a>.
+          The unfiltered numbers stay published below so this correction is checkable rather than
+          something you have to take our word for.
+        </p>
+        <div class="stat-row">
+          <span class="stat-key">unfiltered, last 30 days</span>
+          <span class="stat-value pending" id="raw-active-30d">—</span>
+        </div>
+        <div class="stat-row">
+          <span class="stat-key">unfiltered, total ever</span>
+          <span class="stat-value pending" id="raw-total-ever">—</span>
+        </div>
+      </details>
     </div>
 
     <div class="card">
@@ -217,7 +246,7 @@
 
     <div class="card">
       <h2>version adoption</h2>
-      <p style="font-size:13px;color:var(--fg-2);">Latest known subarr version per install, last 30 days (7-day numbers in parentheses where they differ).</p>
+      <p style="font-size:13px;color:var(--fg-2);">Latest known subarr version per install, last 30 days (7-day numbers in parentheses where they differ). Genuine installs only, as above. Unfiltered, this chart was dominated by the very versions whose setup docs caused the id churn, which made it read as though almost nobody upgrades.</p>
       <div id="versions"><div class="stat-row"><span class="stat-key">loading…</span><span class="stat-value pending">—</span></div></div>
     </div>
 
@@ -296,6 +325,12 @@
         document.getElementById('active-7d').textContent  = (installs.active_7d  || 0).toLocaleString();
         document.getElementById('active-30d').textContent = (installs.active_30d || 0).toLocaleString();
         document.getElementById('total-ever').textContent = (installs.total_ever || 0).toLocaleString();
+        // Raw counts are the pre-#473 numbers. Rendered so the correction above
+        // can be checked against the same response that states it.
+        const raw30 = document.getElementById('raw-active-30d');
+        const rawTot = document.getElementById('raw-total-ever');
+        if (raw30)  raw30.textContent  = (installs.raw_active_30d ?? 0).toLocaleString();
+        if (rawTot) rawTot.textContent = (installs.raw_total_ever ?? 0).toLocaleString();
       }
 
       // Subgen mix

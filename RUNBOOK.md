@@ -47,6 +47,24 @@ for weeks once).
   applied ones are recorded in the `d1_migrations` table.
 - Add a migration: create the next-numbered file, never edit an applied one.
 - Check state: `npx wrangler d1 migrations list subarr-telemetry --remote`
+- **Apply by hand, record by hand.** `0004_onboarding_funnel.sql` was applied
+  directly and never written to `d1_migrations`, so the next
+  `migrations apply` tried to replay it and died on
+  `duplicate column name: onboarding_step`. If you ever run a migration
+  outside the runner, insert its ledger row in the same breath, or you leave
+  the runner broken for whoever comes next. Fixed 2026-08-31.
+- **Do NOT add an index on `pings(install_id)`.** It looks missing: the only
+  `CREATE INDEX` in `migrations/` is `idx_pings_received_at`. It is not.
+  `pings` has `PRIMARY KEY (install_id, received_at)`, whose autoindex
+  (`sqlite_autoindex_pings_1`) already covers `install_id` lookups and
+  `install_id`-ordered scans. Tried on production 2026-08-31 and measured:
+  rows_read was **identical** with and without it (30,764 for the
+  genuine-install filter, 38,446 for versions-30d), and `EXPLAIN QUERY PLAN`
+  showed the existing autoindex serving both correlated subqueries. It was
+  dropped again. On a write-heavy table an index that buys nothing is a pure
+  cost on every ping insert. ⚠️ Grepping `migrations/*.sql` for `CREATE INDEX`
+  is a PROXY; `SELECT name FROM sqlite_master WHERE type='index'` is the
+  artefact, and it lists the autoindexes a constraint created for you.
 - Schema changes must stay in lockstep with `ALLOWED_FIELDS` /
   `STATS_COLUMNS` in `src/worker.js` and with subarr's
   `tests/test_telemetry.py` forbidden-fields regression test.
