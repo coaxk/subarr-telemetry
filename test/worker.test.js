@@ -1,6 +1,12 @@
-// Unit tests for the validation + rate-limit layer. The full Worker
-// fetch test (HTTP end-to-end) lives in worker.integration.test.js and
-// requires the @cloudflare/vitest-pool-workers runtime.
+// Unit tests for the validation + rate-limit layer.
+//
+// There is no in-process Worker fetch test. This header used to promise one in
+// worker.integration.test.js "requiring the @cloudflare/vitest-pool-workers
+// runtime". Neither that file nor a poolOptions config for it ever existed, and
+// the unused dependency was the source of every high-severity advisory in the
+// tree (8 of them, via miniflare -> workerd -> sharp), so it was removed. If an
+// end-to-end fetch test is ever wanted, add the dependency back TOGETHER WITH
+// the config that uses it.
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
