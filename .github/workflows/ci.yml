@@ -5,18 +5,45 @@ on:
   push:
     branches: [main]
 
+# Least-privilege by default: no job here needs to write anything through
+# GITHUB_TOKEN. Deploy authenticates to Cloudflare with its own secrets.
+permissions:
+  contents: read
+
 jobs:
   test:
     name: vitest + lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
           cache: "npm"
       - run: npm ci
       - run: npm test
+
+  zizmor:
+    # Blocking workflow-security audit, matching subarr and subarr-subgen.
+    # This repo deploys to Cloudflare on every push to main using stored API
+    # credentials, so an unpinned action or an over-broad token here is worth
+    # more than in the other two. Pinned to the same version they run so a
+    # local run and CI agree.
+    name: zizmor (workflow security)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.12'
+      - run: pip install zizmor==1.25.2
+      - run: zizmor --persona=regular .github/workflows/
+        env:
+          GH_TOKEN: ${{ github.token }}
 
   deploy:
     name: deploy to cloudflare
@@ -24,8 +51,10 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: "22"
           cache: "npm"
