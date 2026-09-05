@@ -43,7 +43,12 @@ const ALLOWED_FIELDS = new Set([
   "crash_counts_24h",      // #157 P2: object {ExcType:module:line -> count}, normalised into crashes_json
   "install_age_days",      // retention signal: days since this install_id was created
   "data_persistent",       // bool: is /data a real mount vs the container's ephemeral layer
-  "onboarding_step",       // #202: coarse furthest onboarding step reached (0-11)
+  // #202: coarse furthest onboarding step reached. The upper bound MOVES when
+  // the wizard gains a step, and has twice (subarr #231 and #384), so the same
+  // integer names a different screen depending on subarr_version. Currently
+  // 0-12. Validation below deliberately bounds at 99, not at the current max,
+  // so a newer client that adds a step is never silently dropped.
+  "onboarding_step",
   "onboarding_complete",   // #202: bool — did they finish the wizard
   // #479: split the `unreachable` bucket. Neither can carry a hostname,
   // URL, port or exception text.
