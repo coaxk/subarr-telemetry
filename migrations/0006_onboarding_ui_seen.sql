@@ -1,0 +1,11 @@
+-- 0006_onboarding_ui_seen.sql
+--
+-- subarr #480: 87% of incomplete persistent installs sit at onboarding step 0,
+-- which is ambiguous between "opened the wizard and bounced" and "never
+-- opened the UI at all". They call for opposite responses.
+--
+--   onboarding_ui_seen   1 when the onboarding page has ever been rendered
+--                        on that install, 0 when it never has, NULL when the
+--                        client is too old to say. Carries no timestamp, no
+--                        path, no identity.
+ALTER TABLE pings ADD COLUMN onboarding_ui_seen INTEGER;
