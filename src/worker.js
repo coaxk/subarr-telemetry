@@ -54,6 +54,9 @@ const ALLOWED_FIELDS = new Set([
   // URL, port or exception text.
   "subgen_probe_failure",     // closed vocabulary, NULL when reachable
   "subgen_target_is_default", // still on the shipped SUBGEN_URL
+  // #480: bool — has the onboarding page EVER rendered. Splits "stopped at
+  // Welcome" from "never opened the UI". No timestamp, no path.
+  "onboarding_ui_seen",
 ]);
 
 // Forbidden families. If any incoming key matches one of these patterns,
@@ -209,6 +212,9 @@ export function validatePayload(raw) {
   if (out.onboarding_complete != null && typeof out.onboarding_complete !== "boolean") {
     out.onboarding_complete = null;
   }
+  if (out.onboarding_ui_seen != null && typeof out.onboarding_ui_seen !== "boolean") {
+    out.onboarding_ui_seen = null;
+  }
   // integrations + error_counts_30d + crash_counts_24h are flat objects whose
   // KEYS are rendered on the stats page → same XSS/secret/length rules;
   // values must be simple.
@@ -272,8 +278,9 @@ async function recordPing(env, payload, nowS) {
          install_age_days, data_persistent,
          onboarding_step, onboarding_complete,
          subgen_probe_failure, subgen_target_is_default,
+         onboarding_ui_seen,
          raw_payload_json
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
     ).bind(
       payload.install_id, nowS, payload.sent_at ?? null,
       payload.subarr_version ?? null, payload.python_version ?? null,
@@ -291,6 +298,7 @@ async function recordPing(env, payload, nowS) {
       payload.subgen_target_is_default == null
         ? null
         : (payload.subgen_target_is_default ? 1 : 0),
+      payload.onboarding_ui_seen == null ? null : (payload.onboarding_ui_seen ? 1 : 0),
       rawPayloadJson,
     ),
     env.DB.prepare(

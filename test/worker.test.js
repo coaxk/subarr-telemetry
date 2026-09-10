@@ -147,6 +147,18 @@ describe("validatePayload — real client payloads (regression pins)", () => {
     expect(v.value.onboarding_complete).toBeNull();
   });
 
+  it("accepts onboarding_ui_seen as a bool (#480)", () => {
+    const v = validatePayload({ ...SUBARR_140_PAYLOAD, onboarding_ui_seen: false });
+    expect(v.ok).toBe(true);
+    expect(v.value.onboarding_ui_seen).toBe(false);
+  });
+
+  it("drops a non-bool onboarding_ui_seen, never rejects the ping (#480)", () => {
+    const v = validatePayload({ ...SUBARR_140_PAYLOAD, onboarding_ui_seen: "yes" });
+    expect(v.ok).toBe(true);
+    expect(v.value.onboarding_ui_seen).toBeNull();
+  });
+
   it("forwards-compatible: a future field is dropped, ping still accepted", () => {
     const v = validatePayload({ ...SUBARR_140_PAYLOAD, some_future_metric: 7 });
     expect(v.ok).toBe(true);

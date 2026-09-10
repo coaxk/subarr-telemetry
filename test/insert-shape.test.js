@@ -76,6 +76,10 @@ describe("the pings INSERT keeps its three lists in step", () => {
     expect(parsed.columns).toContain("subgen_target_is_default");
   });
 
+  it("writes the column #480 added", () => {
+    expect(parsed.columns).toContain("onboarding_ui_seen");
+  });
+
   it("keeps raw_payload_json last, so appends go before it", () => {
     expect(parsed.columns[parsed.columns.length - 1]).toBe("raw_payload_json");
   });
@@ -87,5 +91,9 @@ describe("the allow-list carries the #479 fields", () => {
     // and nothing errors. The column would just stay NULL forever.
     expect(SOURCE).toContain('"subgen_probe_failure"');
     expect(SOURCE).toContain('"subgen_target_is_default"');
+  });
+
+  it("accepts onboarding_ui_seen (#480)", () => {
+    expect(SOURCE).toContain('"onboarding_ui_seen"');
   });
 });
