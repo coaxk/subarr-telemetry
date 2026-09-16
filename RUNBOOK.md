@@ -127,6 +127,29 @@ than the restore point, THEN redeploy the worker.
 Cache API in `src/worker.js`). A "stale" dashboard within 5 minutes of a
 change is the cache, not a bug. `/v1/ping` is never cached.
 
+⚠️ The worker sends `max-age=300`, but a live response came back with
+`max-age=14400` (checked 2026-09-17): the zone's Browser Cache TTL setting
+overrides it, so a browser can show stats up to 4 hours old. The edge copy
+still expires at 300 s.
+
+## Retention (raw payloads)
+
+A daily cron (`[triggers]` in `wrangler.toml`, 03:17 UTC) runs
+`pruneRawPayloads` in `src/worker.js`: `pings.raw_payload_json` is set to NULL
+on rows older than 90 days, except each install's latest ping, which keeps its
+raw copy forever so `test/corpus/real-pings.json` can still sample every version
+seen in the wild. Rows and their derived columns are never deleted.
+
+- Evidence it ran: the worker log line `retention: blanked raw_payload_json on N ping(s)`,
+  or `SELECT COUNT(*) FROM pings WHERE raw_payload_json IS NULL` going up.
+- Sized 2026-09-17: 37,195 rows, 34 MB database, 18 MB of raw payloads; the
+  first run was expected to blank 651 rows and keep 4,877 old "latest" rows.
+  A count query read ~48k rows (about 1.3 table scans), well inside D1's free
+  daily read allowance.
+- The "latest per install" lookup must stay NON-correlated: `install_id` has no
+  index, and a per-row subquery would read the table once per candidate.
+  `test/retention.test.js` checks the query plan.
+
 ## Data policy quick-reference
 
 - Privacy: hard column allow-list; forbidden fingerprintable fields reject

@@ -568,6 +568,44 @@ export function isCacheableStats(method, pathname) {
   return method === "GET" && pathname.startsWith("/v1/stats/");
 }
 
+// Retention for pings.raw_payload_json (issue #2). The raw copy is about half
+// the database and nothing reads it except an occasional refresh of
+// test/corpus/real-pings.json. Keep it for RAW_PAYLOAD_RETENTION_DAYS, and keep
+// each install's LATEST ping forever so that corpus can still sample every
+// version seen in the wild. Rows and their derived columns are never touched.
+//
+// "Latest per install" is a NON-correlated subquery on purpose: install_id has
+// no index, and D1 bills rows read, so a per-row lookup would read the table
+// once per candidate. test/retention.test.js checks the plan.
+export const RAW_PAYLOAD_RETENTION_DAYS = 90;
+const RETENTION_BATCH = 5000;
+const RETENTION_MAX_BATCHES = 20;
+
+export const PRUNE_RAW_PAYLOADS_SQL = `UPDATE pings SET raw_payload_json = NULL
+WHERE rowid IN (
+  SELECT rowid FROM pings
+  WHERE raw_payload_json IS NOT NULL
+    AND received_at < ?1
+    AND rowid NOT IN (SELECT MAX(rowid) FROM pings GROUP BY install_id)
+  LIMIT ?2
+)`;
+
+export async function pruneRawPayloads(
+  db,
+  nowS,
+  { days = RAW_PAYLOAD_RETENTION_DAYS, batch = RETENTION_BATCH, maxBatches = RETENTION_MAX_BATCHES } = {},
+) {
+  const cutoff = nowS - days * 86400;
+  let total = 0;
+  for (let i = 0; i < maxBatches; i++) {
+    const res = await db.prepare(PRUNE_RAW_PAYLOADS_SQL).bind(cutoff, batch).run();
+    const changed = Number(res?.meta?.changes ?? 0);
+    total += changed;
+    if (changed < batch) break;
+  }
+  return total;
+}
+
 function withCors(res, cors) {
   // Clone so we never mutate a cached Response's immutable headers, and so a
   // cross-origin hit gets ITS Access-Control-Allow-Origin, not the first
@@ -613,5 +651,17 @@ export default {
       console.error("worker error:", e?.stack || e);
       return jsonResponse({ ok: false, reason: "internal error" }, 500, cors);
     }
+  },
+
+  // Daily cron (wrangler.toml [triggers]). Logs the count so a retention run
+  // that silently stops working shows up as a missing line in the worker logs.
+  async scheduled(controller, env, ctx) {
+    const nowS = Math.floor((controller?.scheduledTime ?? Date.now()) / 1000);
+    ctx.waitUntil(
+      pruneRawPayloads(env.DB, nowS).then(
+        (n) => console.log(`retention: blanked raw_payload_json on ${n} ping(s) older than ${RAW_PAYLOAD_RETENTION_DAYS}d`),
+        (e) => console.error("retention failed:", e?.stack || e),
+      ),
+    );
   },
 };

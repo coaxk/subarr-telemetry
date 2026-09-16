@@ -38,6 +38,11 @@ database_id = "a852f2e1-cbda-487d-8d92-83fb614d7a9c"
 # on CF-Connecting-IP entirely at the edge and NEVER persists the IP, so it
 # adds no fingerprintable storage. Legit telemetry is ~1 ping/day/install; even
 # a multi-install household behind one NAT won't approach 30/min.
+[triggers]
+crons = ["17 3 * * *"]
+# Daily 03:17 UTC: blank raw_payload_json older than 90 days, keeping each
+# install's latest ping (issue #2). See pruneRawPayloads in src/worker.js.
+
 [[ratelimits]]
 name = "PING_LIMITER"
 namespace_id = "1001"
