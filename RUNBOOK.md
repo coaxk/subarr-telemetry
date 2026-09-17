@@ -146,6 +146,7 @@ seen in the wild. Rows and their derived columns are never deleted.
   first run was expected to blank 651 rows and keep 4,877 old "latest" rows.
   A count query read ~48k rows (about 1.3 table scans), well inside D1's free
   daily read allowance.
+- First run verified 2026-09-17 (after the 03:17 UTC cron): NULL count 0 -> 678 of 37,254 rows (651 predicted, the rest crossed the 90-day line since the dry count), 0 old non-latest rows left un-blanked, 0 latest-per-install rows blanked, 4,884 old latest rows kept.
 - The "latest per install" lookup must stay NON-correlated: `install_id` has no
   index, and a per-row subquery would read the table once per candidate.
   `test/retention.test.js` checks the query plan.
