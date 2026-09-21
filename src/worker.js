@@ -10,6 +10,7 @@
 //   GET  /v1/stats/scheduler-modes    — manual_confirm vs auto_queue vs disabled
 //   GET  /v1/stats/versions           — subarr version distribution (30d window)
 //   GET  /v1/stats/versions-7d        — same, 7d window (release-rollout watching)
+//   GET  /v1/stats/onboarding-outcomes — completed / configured-without-wizard / never-engaged / abandoned (#582)
 //   GET  /v1/health                   — worker liveness (no DB hit)
 //
 // All POSTs respect a per-install rate limit (env.MIN_INTERVAL_S). Pings
@@ -484,6 +485,105 @@ async function statsSubgenMix(env, nowS) {
   });
 }
 
+// subarr#582: what actually happened to onboarding, instead of a bare
+// completion boolean.
+//
+// `onboarding_complete = false` was read as "did not finish". For an install
+// configured entirely by environment variables that is wrong: it never needed
+// the wizard, never opened it, and is working. Measured on genuine installs
+// (latest ping, 30d): of the 41 non-finishers whose client reports
+// `onboarding_ui_seen`, 15 had Bazarr connected, 15 Sonarr, 10 a real library
+// and 7 were actively walking. Blending them with the ~26 that configured
+// nothing is what produced "44% never finish" — the same class of fault as
+// #473, where the metric described our own definition rather than the user.
+//
+// ⚠️ `onboarding_ui_seen = false` is NOT evidence the wizard was never opened
+// for an install that COMPLETED: the flag only starts recording when the page
+// renders, so anyone who finished before it shipped reports false forever
+// (46 such installs at time of writing). It is only sound for installs that
+// have not completed, which is the only place the rules below consult it.
+export const ONBOARDING_OUTCOMES = [
+  "completed",
+  "configured_without_wizard",
+  "never_engaged",
+  "abandoned",
+  "unknown",
+];
+
+// A library this size means the install is doing real work. `<100` is the
+// bucket a fresh or broken install sits in, so it is NOT evidence.
+const REAL_LIBRARY_BUCKETS = new Set(["100-1k", "1k-10k", ">10k"]);
+
+// Only the integrations that indicate the CORE setup was done. Ollama and
+// Tautulli are optional extras and say nothing about whether subarr can work.
+const CORE_INTEGRATIONS = ["bazarr", "sonarr", "radarr"];
+
+function hasCoreIntegration(integrationsJson) {
+  if (!integrationsJson) return false;
+  let obj;
+  try { obj = JSON.parse(integrationsJson); }
+  catch { return false; }   // malformed is not evidence, and must not throw
+  return CORE_INTEGRATIONS.some((k) => (obj || {})[k] === true);
+}
+
+export function classifyOnboarding(row = {}) {
+  // Completion is authoritative and independent of the flag's age.
+  if (row.onboarding_complete === 1 || row.onboarding_complete === true) {
+    return "completed";
+  }
+  const seen = row.onboarding_ui_seen;
+  if (seen === null || seen === undefined) {
+    // Client too old to say. Unknown, never a loss: assuming "never opened"
+    // here would recreate the fault this endpoint exists to fix.
+    return "unknown";
+  }
+  if (seen === 1 || seen === true) {
+    // They opened it and stopped. The only bucket for which onboarding_step
+    // means anything, and the only one a wizard redesign could move.
+    return "abandoned";
+  }
+  const configured =
+    hasCoreIntegration(row.integrations_json) ||
+    REAL_LIBRARY_BUCKETS.has(row.library_bucket);
+  return configured ? "configured_without_wizard" : "never_engaged";
+}
+
+async function statsOnboardingOutcomes(env, nowS) {
+  const cutoff = nowS - 30 * 86400;
+  const rows = await env.DB.prepare(
+    `SELECT onboarding_complete, onboarding_ui_seen, integrations_json,
+            library_bucket, walks_per_day
+       FROM pings p
+      WHERE received_at > ?
+        AND received_at = (SELECT MAX(received_at) FROM pings WHERE install_id = p.install_id)
+        AND p.install_id IN (${GENUINE_INSTALLS_SQL})`
+  ).bind(cutoff).all();
+
+  const counts = Object.fromEntries(ONBOARDING_OUTCOMES.map((k) => [k, 0]));
+  for (const row of rows.results || []) counts[classifyOnboarding(row)] += 1;
+
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
+  // The denominator is published, not implied. Every rate below EXCLUDES
+  // `unknown`, because an install whose client cannot report the flag has not
+  // been measured — quoting a rate over the full total would be a confident
+  // number over the wrong base, which is exactly what #202 got wrong.
+  const classified = total - counts.unknown;
+  return jsonResponse({
+    window_days: 30,
+    counts,
+    total_installs: total,
+    classified_installs: classified,
+    counting: "genuine",
+    counting_note:
+      "Rates are over classified_installs, which EXCLUDES `unknown`. " +
+      "`unknown` is an install whose client does not report onboarding_ui_seen " +
+      "(added in subarr 2.7.3); it has not been measured, it is not a loss. " +
+      "`configured_without_wizard` is a working install set up by environment " +
+      "variables — subarr#582, previously counted as a funnel loss.",
+    computed_at: nowS,
+  });
+}
+
 async function statsIntegrations(env, nowS) {
   // Pull each install's latest integrations_json, parse, count true-counts.
   const cutoff = nowS - 30 * 86400;
@@ -548,6 +648,7 @@ const ROUTES = {
   "GET /v1/stats/installs": (req, env, now) => statsInstalls(env, now),
   "GET /v1/stats/subgen-mix": (req, env, now) => statsSubgenMix(env, now),
   "GET /v1/stats/integrations": (req, env, now) => statsIntegrations(env, now),
+  "GET /v1/stats/onboarding-outcomes": (req, env, now) => statsOnboardingOutcomes(env, now),
   "GET /v1/stats/library-size": (req, env, now) => statsByColumn(env, now, "library_bucket"),
   "GET /v1/stats/walks-per-day": (req, env, now) => statsByColumn(env, now, "walks_per_day"),
   "GET /v1/stats/scheduler-modes": (req, env, now) => statsByColumn(env, now, "scheduler_mode"),
