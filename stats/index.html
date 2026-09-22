@@ -245,6 +245,12 @@
     </div>
 
     <div class="card">
+      <h2>onboarding outcomes</h2>
+      <p style="font-size:13px;color:var(--fg-2);">What actually happened to setup, per install, last 30 days. Percentages are of <em>classified</em> installs and exclude <code>not measured</code> — an install whose client predates the signal (subarr 2.7.3) has not been measured, and counting it as a failure is what made an earlier read of this data say "44% never finish". <strong>Configured without the wizard</strong> is a working install set up by environment variables: it never needed the wizard, and it is not a loss.</p>
+      <div id="onboarding-outcomes"><div class="stat-row"><span class="stat-key">loading…</span><span class="stat-value pending">—</span></div></div>
+    </div>
+
+    <div class="card">
       <h2>version adoption</h2>
       <p style="font-size:13px;color:var(--fg-2);">Latest known subarr version per install, last 30 days (7-day numbers in parentheses where they differ). Genuine installs only, as above. Unfiltered, this chart was dominated by the very versions whose setup docs caused the id churn, which made it read as though almost nobody upgrades.</p>
       <div id="versions"><div class="stat-row"><span class="stat-key">loading…</span><span class="stat-value pending">—</span></div></div>
@@ -348,6 +354,41 @@
       } else if (mix) {
         document.getElementById('subgen-mix').innerHTML =
           '<div class="stat-row"><span class="stat-key">no data yet</span><span class="stat-value pending">—</span></div>';
+      }
+
+      // Onboarding outcomes (subarr#582). Rendered in a fixed order rather
+      // than by size: these are stages of one story, and re-ordering them by
+      // count would make the card read differently week to week. `unknown` is
+      // labelled "not measured" and carries no percentage — it is the
+      // denominator caveat, not a result.
+      const onboarding = await tryFetch('/v1/stats/onboarding-outcomes');
+      if (onboarding && onboarding.counts) {
+        const LABELS = [
+          ['completed', 'completed the wizard'],
+          ['configured_without_wizard', 'configured without the wizard'],
+          ['never_engaged', 'never engaged'],
+          ['abandoned', 'abandoned partway'],
+          ['unknown', 'not measured'],
+        ];
+        const classified = onboarding.classified_installs || 0;
+        const rows = LABELS
+          .filter(([k]) => onboarding.counts[k] != null)
+          .map(([k, label]) => {
+            const n = onboarding.counts[k] || 0;
+            const pct = (k === 'unknown' || !classified)
+              ? null
+              : Math.round((n / classified) * 100);
+            const value = pct === null
+              ? `${n.toLocaleString()}`
+              : `${n.toLocaleString()} · ${pct}%`;
+            return `<div class="stat-row">
+              <span class="stat-key">${esc(label)}</span>
+              <span class="stat-value">${esc(value)}</span>
+            </div>`;
+          });
+        document.getElementById('onboarding-outcomes').innerHTML = rows.length
+          ? rows.join('')
+          : '<div class="stat-row"><span class="stat-key">no data yet</span><span class="stat-value pending">—</span></div>';
       }
 
       // Integrations
